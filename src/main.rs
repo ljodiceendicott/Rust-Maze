@@ -1,188 +1,142 @@
-use std::{
-    io::{self, Write},
-    usize::MIN,
-};
+use std::io::{self, Write};
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Tile {
     Wall,
-    Empty,
-    Start,
-    End,
+    Path,
 }
-//Write code so that both are coming from the same object of Maze then have 2 values, being
-//Fixed-maze & Custom-Maze
-//Could also seperate this into another file maybe later
+
 struct Maze {
     grid: Vec<Vec<Tile>>,
-    start: (usize, usize),
-    end: (usize, usize),
+    width: usize,
+    height: usize,
 }
 
-struct CustomMaze {
-    grid: Vec<Vec<char>>,
-    start: (usize, usize),
-    end: (usize, usize),
-}
 impl Maze {
-    fn new() -> Self {
-        let grid = vec![
-            vec![Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall],
-            vec![
-                Tile::Wall,
-                Tile::Empty,
-                Tile::Empty,
-                Tile::Empty,
-                Tile::Wall,
-            ],
-            vec![Tile::Wall, Tile::Wall, Tile::Wall, Tile::Empty, Tile::Wall],
-            vec![Tile::Wall, Tile::Start, Tile::Empty, Tile::End, Tile::Wall],
-            vec![Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall, Tile::Wall],
-        ];
+    fn new(width: usize, height: usize) -> Self {
+        let mut grid = vec![vec![Tile::Wall; width]; height];
 
-        let start = (3, 1);
-        let end = (3, 3);
-
-        Maze { grid, start, end }
-    }
-    fn print(&self) {
-        for row in &self.grid {
-            for tile in row {
-                let symbol = match tile {
-                    Tile::Wall => "#",
-                    Tile::Empty => " ",
-                    Tile::Start => "S",
-                    Tile::End => "E",
-                };
-                print!("{}", symbol);
+        // Simple random maze generation (can be customized later)
+        for y in 1..height - 1 {
+            for x in 1..width - 1 {
+                // if rng.gen_bool(0.3) {
+                grid[y][x] = Tile::Path;
+                //}
             }
-            println!();
+        }
+
+        // Ensure starting and ending points are paths
+        grid[1][1] = Tile::Path;
+        grid[height - 2][width - 2] = Tile::Path;
+
+        Maze {
+            grid,
+            width,
+            height,
         }
     }
 
-    fn is_valid_move(&self, x: usize, y: usize) -> bool {
-        x < self.grid.len() && y < self.grid[0].len() && self.grid[x][y] != Tile::Wall
-    }
+    //fn display(&self) {
+    //  println!("Maze (Player 'P' represents your position):");
+    //   for row in &self.grid {
+    //     for tile in row {
+    //         let symbol = match tile {
+    //           Tile::Wall => "#",
+    //         Tile::Path => " ",
+    //   };
+    // print!("{}", symbol);
+    //  }
+    //  println!();
+    //  }
+    // }
 }
 
-impl CustomMaze {
-    fn new() -> Self {
-        let grid = vec![
-            vec!['#', '#', '#', '#', '#', '#', '#', '#', '#', '#'],
-            vec!['#', 'S', ' ', ' ', '#', ' ', ' ', ' ', '#'],
-            vec!['#', ' ', '#', ' ', '#', ' ', '#', ' ', '#'],
-            vec!['#', ' ', '#', ' ', '#', ' ', '#', ' ', '#'],
-            vec!['#', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '#'],
-            vec!['#', ' ', '#', '#', '#', '#', '#', ' ', '#'],
-            vec!['#', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '#'],
-            vec!['#', ' ', '#', '#', ' ', '#', '#', ' ', '#'],
-            vec!['#', ' ', ' ', ' ', ' ', ' ', ' ', 'E', '#'],
-            vec!['#', '#', '#', '#', '#', '#', '#', '#', '#', '#'],
-        ];
+struct Game {
+    maze: Maze,
+    player_x: usize,
+    player_y: usize,
+}
 
-        let mut start = (MIN, MIN);
-        let mut end = (MIN, MIN);
+impl Game {
+    fn new(maze: Maze) -> Self {
+        Game {
+            maze,
+            player_x: 1,
+            player_y: 1,
+        }
+    }
 
-        //This is so that when new maps are added, you can find the start and end
-        for (i, row) in grid.iter().enumerate() {
-            for (y, &cell) in row.iter().enumerate() {
-                if cell == 'S' {
-                    start = (i, y);
-                } else if cell == 'E' {
-                    end = (i, y);
+    fn render(&self) {
+        println!();
+        println!();
+        println!();
+        println!();
+        println!();
+        println!();
+        println!();
+        println!();
+
+        println!();
+        for y in 0..self.maze.height {
+            for x in 0..self.maze.width {
+                if self.player_x == x && self.player_y == y {
+                    print!("P"); // Player's position
+                } else {
+                    match self.maze.grid[y][x] {
+                        Tile::Wall => print!("#"),
+                        Tile::Path => print!(" "),
+                    }
                 }
             }
-        }
-
-        CustomMaze { grid, start, end }
-    }
-
-    fn printalt(&self) {
-        for row in &self.grid {
-            for tile in row {
-                let symbol = tile;
-                print!("{}", symbol);
-            }
             println!();
         }
+        println!();
     }
-}
-struct Player {
-    x: usize,
-    y: usize,
-}
 
-impl Player {
-    fn new(start_x: usize, start_y: usize) -> Self {
-        Player {
-            x: start_x,
-            y: start_y,
+    fn move_player(&mut self, dx: isize, dy: isize) {
+        let new_x = self.player_x as isize + dx;
+        let new_y = self.player_y as isize + dy;
+
+        if new_x >= 0
+            && new_x < self.maze.width as isize
+            && new_y >= 0
+            && new_y < self.maze.height as isize
+            && self.maze.grid[new_y as usize][new_x as usize] == Tile::Path
+        {
+            self.player_x = new_x as usize;
+            self.player_y = new_y as usize;
         }
     }
 
-    fn move_player(&mut self, maze: &Maze, direction: &str) {
-        let (dx, dy) = match direction {
-            "w" => (-1, 0), // up
-            "s" => (1, 0),  // down
-            "a" => (0, -1), // left
-            "d" => (0, 1),  // right
-            _ => (0, 0),
-        };
+    fn play(&mut self) {
+        loop {
+            self.render();
+            println!();
+            println!();
+            println!();
+            println!();
+            println!("Use WASD to move (Q to quit):");
+            let mut input = String::new();
+            io::stdout().flush().unwrap(); // Flush to ensure prompt is displayed
 
-        let new_x = (self.x as isize + dx) as usize;
-        let new_y = (self.y as isize + dy) as usize;
+            io::stdin().read_line(&mut input).unwrap();
+            let input = input.trim().to_lowercase();
 
-        if maze.is_valid_move(new_x, new_y) {
-            self.x = new_x;
-            self.y = new_y;
-        } else {
-            print!("Last Move was invalid, so you were not moved");
+            match input.as_str() {
+                "q" => break,                   // Quit the game
+                "w" => self.move_player(0, -1), // Up
+                "a" => self.move_player(-1, 0), // Left
+                "s" => self.move_player(0, 1),  // Down
+                "d" => self.move_player(1, 0),  // Right
+                _ => println!("Invalid input. Please press W, A, S, D, or Q."),
+            }
         }
     }
 }
-
-//Using a method to get the maze instead and returning a maze depending on result
-fn get_maze(x: usize) {}
 
 fn main() {
-    println!("Hello! Would you like the easy or the hard maze?");
-    println!("1.)EZ\n2.HARD");
-    io::stdout().flush().unwrap();
+    let maze = Maze::new(30, 15); // Customize maze size here
+    let mut game = Game::new(maze);
 
-    let mut player = Player::new(1, 1); // Starting position
-    let mut move_input = String::new();
-    io::stdin().read_line(&mut move_input).unwrap();
-    let move_input = move_input.trim();
-
-    if move_input == "q" {
-        print!("Have a good day!");
-    } else if move_input == "1" {
-        let maze = Maze::new();
-    } else if move_input == "2" {
-        let maze = CustomMaze::new();
-    }
-
-    loop {
-        println!("\nMove the player (w = up, s = down, a = left, d = right, q = quit): ");
-        println!("Player Coords {},{}", player.x, player.y);
-        print!("Your choice: ");
-        io::stdout().flush().unwrap();
-
-        let mut move_input = String::new();
-        io::stdin().read_line(&mut move_input).unwrap();
-        let move_input = move_input.trim();
-
-        if move_input == "q" {
-            break;
-        }
-
-        player.move_player(&maze, move_input);
-
-        if (player.x, player.y) == maze.end {
-            println!("Congratulations! You've reached the end!");
-            break;
-        }
-        println!("Maze:");
-        maze.print();
-    }
+    game.play();
 }
