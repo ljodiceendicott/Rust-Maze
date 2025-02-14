@@ -1,142 +1,202 @@
-use std::io::{self, Write};
+use std::usize;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Tile {
+use bracket_lib::prelude::*;
+
+// Player struct
+struct Player {
+    x: i32,
+    y: i32,
+}
+
+enum Direction{
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+struct Proj {
+    x: i32,
+    y: i32,
+    movment: Direction,
+}
+
+// Map tile types
+#[derive(Clone, Copy, PartialEq)]
+enum TileType {
+    OuterWall,
     Wall,
-    Path,
+    Floor,
+    Proj,
 }
 
-struct Maze {
-    grid: Vec<Vec<Tile>>,
-    width: usize,
-    height: usize,
+// Game map
+struct Map {
+    tiles: Vec<Vec<TileType>>,
+    width: i32,
+    height: i32,
 }
 
-impl Maze {
-    fn new(width: usize, height: usize) -> Self {
-        let mut grid = vec![vec![Tile::Wall; width]; height];
-
-        // Simple random maze generation (can be customized later)
-        for y in 1..height - 1 {
-            for x in 1..width - 1 {
-                // if rng.gen_bool(0.3) {
-                grid[y][x] = Tile::Path;
-                //}
+impl Map {
+    // Create a simple map with walls around the edges
+    fn new(width: i32, height: i32) -> Self {
+        let mut tiles = vec![vec![TileType::Floor; height as usize]; width as usize];
+        
+        // Add walls around the map borders
+        for x in 0..width {
+            for y in 0..height {
+                if x == 0 || x == width - 1 || y == 0 || y == height - 1 {
+                    tiles[x as usize][y as usize] = TileType::OuterWall;
+                }
             }
         }
-
-        // Ensure starting and ending points are paths
-        grid[1][1] = Tile::Path;
-        grid[height - 2][width - 2] = Tile::Path;
-
-        Maze {
-            grid,
+        
+        // Add some inner walls
+        tiles[5][5] = TileType::Wall;
+        tiles[5][6] = TileType::Wall;
+        tiles[5][7] = TileType::Wall;
+        
+        Map {
+            tiles,
             width,
             height,
         }
     }
 
-    //fn display(&self) {
-    //  println!("Maze (Player 'P' represents your position):");
-    //   for row in &self.grid {
-    //     for tile in row {
-    //         let symbol = match tile {
-    //           Tile::Wall => "#",
-    //         Tile::Path => " ",
-    //   };
-    // print!("{}", symbol);
-    //  }
-    //  println!();
-    //  }
-    // }
+    // Check if a tile is walkable
+    fn can_enter_tile(&self, x: i32, y: i32) -> bool {
+        if x < 0 || x >= self.width || y < 0 || y >= self.height {
+            return false;
+        }
+        self.tiles[x as usize][y as usize] != TileType::Wall
+    }
 }
 
-struct Game {
-    maze: Maze,
-    player_x: usize,
-    player_y: usize,
+// Game state
+struct State {
+    player: Player,
+    map: Map,
 }
 
-impl Game {
-    fn new(maze: Maze) -> Self {
-        Game {
-            maze,
-            player_x: 1,
-            player_y: 1,
+impl State {
+    fn new() -> Self {
+        State {
+            player: Player { x: 10, y: 10 },
+            map: Map::new(30, 30),
         }
     }
+}
 
-    fn render(&self) {
-        println!();
-        println!();
-        println!();
-        println!();
-        println!();
-        println!();
-        println!();
-        println!();
-
-        println!();
-        for y in 0..self.maze.height {
-            for x in 0..self.maze.width {
-                if self.player_x == x && self.player_y == y {
-                    print!("P"); // Player's position
-                } else {
-                    match self.maze.grid[y][x] {
-                        Tile::Wall => print!("#"),
-                        Tile::Path => print!(" "),
+// Implement the GameState trait for our state
+impl GameState for State {
+    fn tick(&mut self, ctx: &mut BTerm) {
+        // Handle input
+        if let Some(key) = ctx.key {
+            match key {
+                VirtualKeyCode::A => {
+                    if self.map.can_enter_tile(self.player.x - 1, self.player.y) {
+                        self.player.x -= 1;
                     }
                 }
-            }
-            println!();
-        }
-        println!();
-    }
-
-    fn move_player(&mut self, dx: isize, dy: isize) {
-        let new_x = self.player_x as isize + dx;
-        let new_y = self.player_y as isize + dy;
-
-        if new_x >= 0
-            && new_x < self.maze.width as isize
-            && new_y >= 0
-            && new_y < self.maze.height as isize
-            && self.maze.grid[new_y as usize][new_x as usize] == Tile::Path
-        {
-            self.player_x = new_x as usize;
-            self.player_y = new_y as usize;
-        }
-    }
-
-    fn play(&mut self) {
-        loop {
-            self.render();
-            println!();
-            println!();
-            println!();
-            println!();
-            println!("Use WASD to move (Q to quit):");
-            let mut input = String::new();
-            io::stdout().flush().unwrap(); // Flush to ensure prompt is displayed
-
-            io::stdin().read_line(&mut input).unwrap();
-            let input = input.trim().to_lowercase();
-
-            match input.as_str() {
-                "q" => break,                   // Quit the game
-                "w" => self.move_player(0, -1), // Up
-                "a" => self.move_player(-1, 0), // Left
-                "s" => self.move_player(0, 1),  // Down
-                "d" => self.move_player(1, 0),  // Right
-                _ => println!("Invalid input. Please press W, A, S, D, or Q."),
+                VirtualKeyCode::D => {
+                    if self.map.can_enter_tile(self.player.x + 1, self.player.y) {
+                        self.player.x += 1;
+                    }
+                }
+                VirtualKeyCode::W => {
+                    if self.map.can_enter_tile(self.player.x, self.player.y - 1) {
+                        self.player.y -= 1;
+                    }
+                }
+                VirtualKeyCode::S => {
+                    if self.map.can_enter_tile(self.player.x, self.player.y + 1) {
+                        self.player.y += 1;
+                    }
+                }
+                //arrow keys for projectile movement
+                VirtualKeyCode::Up => {
+                  self.map.tiles[self.player.x as usize][(self.player.y-1) as usize] = TileType::Proj;
+                }
+                _ => {}
             }
         }
+
+        // Clear the screen
+        ctx.cls();
+
+        // Draw the map
+        for x in 0..self.map.width {
+            for y in 0..self.map.height {
+                let glyph = match self.map.tiles[x as usize][y as usize] {
+                    TileType::Wall => '#',
+                    TileType::Floor => '.',
+                    TileType::OuterWall =>'.',
+                    TileType::Proj => '°',
+                };
+                ctx.set(x, y, RGB::named(WHITE), RGB::named(BLACK), glyph);
+            }
+        }
+
+        // Draw the player
+        ctx.set(
+            self.player.x,
+            self.player.y,
+            RGB::named(GREEN),
+            RGB::named(BLACK),
+            '@',
+        );
+
+        // Add text at the bottom of the screen
+        let bottom_text = format!("Player Position: ({}, {})", self.player.x, self.player.y);
+        ctx.print_color(
+            1, // X position (left-aligned)
+            self.map.height, // Y position (bottom of the screen)
+            RGB::named(WHITE),
+            RGB::named(BLACK),
+            bottom_text,
+        );
+
+        let movementup: String = format!("Move Forward => W");
+        ctx.print_color(
+            1, // X position (left-aligned)
+            self.map.height+1, // Y position (bottom of the screen)
+            RGB::named(WHITE),
+            RGB::named(BLACK),
+            movementup,
+        );
+        let movement2: String = format!("Move Backward => S");
+        ctx.print_color(
+            1, // X position (left-aligned)
+            self.map.height+3, // Y position (bottom of the screen)
+            RGB::named(WHITE),
+            RGB::named(BLACK),
+            movement2,
+        );
+        let movement3: String = format!("Move Left => A");
+        ctx.print_color(
+            1, // X position (left-aligned)
+            self.map.height+5, // Y position (bottom of the screen)
+            RGB::named(WHITE),
+            RGB::named(BLACK),
+            movement3,
+        );
+        let movement4: String = format!("Move Right => D");
+        ctx.print_color(
+            1, // X position (left-aligned)
+            self.map.height+7, // Y position (bottom of the screen)
+            RGB::named(WHITE),
+            RGB::named(BLACK),
+            movement4,
+        );
     }
 }
 
-fn main() {
-    let maze = Maze::new(30, 15); // Customize maze size here
-    let mut game = Game::new(maze);
+fn main() -> BError {
+    let context = BTermBuilder::simple(30, 40)?
+        .with_title("Rusty Rust ")
+        .with_fps_cap(45.0)
+        .build()?;
+    
 
-    game.play();
+    main_loop(context, State::new())
 }
