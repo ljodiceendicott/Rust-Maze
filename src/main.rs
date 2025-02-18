@@ -1,88 +1,25 @@
 use std::usize;
 
 use bracket_lib::prelude::*;
-
-// Player struct
-struct Player {
-    x: i32,
-    y: i32,
-}
-
-enum Direction{
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-struct Proj {
-    x: i32,
-    y: i32,
-    movment: Direction,
-}
-
-// Map tile types
-#[derive(Clone, Copy, PartialEq)]
-enum TileType {
-    OuterWall,
-    Wall,
-    Floor,
-    Proj,
-}
-
-// Game map
-struct Map {
-    tiles: Vec<Vec<TileType>>,
-    width: i32,
-    height: i32,
-}
-
-impl Map {
-    // Create a simple map with walls around the edges
-    fn new(width: i32, height: i32) -> Self {
-        let mut tiles = vec![vec![TileType::Floor; height as usize]; width as usize];
-        
-        // Add walls around the map borders
-        for x in 0..width {
-            for y in 0..height {
-                if x == 0 || x == width - 1 || y == 0 || y == height - 1 {
-                    tiles[x as usize][y as usize] = TileType::OuterWall;
-                }
-            }
-        }
-        
-        // Add some inner walls
-        tiles[5][5] = TileType::Wall;
-        tiles[5][6] = TileType::Wall;
-        tiles[5][7] = TileType::Wall;
-        
-        Map {
-            tiles,
-            width,
-            height,
-        }
-    }
-
-    // Check if a tile is walkable
-    fn can_enter_tile(&self, x: i32, y: i32) -> bool {
-        if x < 0 || x >= self.width || y < 0 || y >= self.height {
-            return false;
-        }
-        self.tiles[x as usize][y as usize] != TileType::Wall
-    }
-}
+mod game_objects;
+use game_objects::*;
 
 // Game state
 struct State {
     player: Player,
-    map: Map,
+    map: Map,  // This will now use Map from game_objects
 }
 
 impl State {
     fn new() -> Self {
         State {
-            player: Player { x: 10, y: 10 },
-            map: Map::new(30, 30),
+            player: Player { 
+                x: 10, 
+                y: 10, 
+                facing: Direction::Up,
+                projectiles: Vec::new(),
+            },
+            map: Map::new(30, 30),  // This will now use the wall initialization from game_objects.rs
         }
     }
 }
@@ -93,31 +30,91 @@ impl GameState for State {
         // Handle input
         if let Some(key) = ctx.key {
             match key {
+                // Movement controls (WASD)
                 VirtualKeyCode::A => {
                     if self.map.can_enter_tile(self.player.x - 1, self.player.y) {
                         self.player.x -= 1;
                     }
+                    self.player.facing = Direction::Left;
                 }
                 VirtualKeyCode::D => {
                     if self.map.can_enter_tile(self.player.x + 1, self.player.y) {
                         self.player.x += 1;
                     }
+                    self.player.facing = Direction::Right;
                 }
                 VirtualKeyCode::W => {
                     if self.map.can_enter_tile(self.player.x, self.player.y - 1) {
                         self.player.y -= 1;
                     }
+                    self.player.facing = Direction::Up;
                 }
                 VirtualKeyCode::S => {
                     if self.map.can_enter_tile(self.player.x, self.player.y + 1) {
                         self.player.y += 1;
                     }
+                    self.player.facing = Direction::Down;
                 }
-                //arrow keys for projectile movement
+                // Shooting controls (Arrow keys)
+                VirtualKeyCode::Left => {
+                    let proj = Proj::new(self.player.x, self.player.y, Direction::Left);
+                    if self.map.can_enter_tile(proj.nextx, proj.nexty) {
+                        self.map.tiles[proj.nextx as usize][proj.nexty as usize] = TileType::Proj;
+                        self.player.projectiles.push(proj);
+                    }
+                }
+                VirtualKeyCode::Right => {
+                    let proj = Proj::new(self.player.x, self.player.y, Direction::Right);
+                    if self.map.can_enter_tile(proj.nextx, proj.nexty) {
+                        self.map.tiles[proj.nextx as usize][proj.nexty as usize] = TileType::Proj;
+                        self.player.projectiles.push(proj);
+                    }
+                }
                 VirtualKeyCode::Up => {
-                  self.map.tiles[self.player.x as usize][(self.player.y-1) as usize] = TileType::Proj;
+                    let proj = Proj::new(self.player.x, self.player.y, Direction::Up);
+                    if self.map.can_enter_tile(proj.nextx, proj.nexty) {
+                        self.map.tiles[proj.nextx as usize][proj.nexty as usize] = TileType::Proj;
+                        self.player.projectiles.push(proj);
+                    }
+                }
+                VirtualKeyCode::Down => {
+                    let proj = Proj::new(self.player.x, self.player.y, Direction::Down);
+                    if self.map.can_enter_tile(proj.nextx, proj.nexty) {
+                        self.map.tiles[proj.nextx as usize][proj.nexty as usize] = TileType::Proj;
+                        self.player.projectiles.push(proj);
+                    }
                 }
                 _ => {}
+            }
+        }
+
+        // Update all projectiles
+        let mut i = 0;
+        while i < self.player.projectiles.len() {
+            let proj = &mut self.player.projectiles[i];
+            
+            // Clear the current projectile position
+            self.map.tiles[proj.x as usize][proj.y as usize] = TileType::Floor;
+            
+            // Update the projectile position
+            proj.update();
+            
+            // Collision check
+                if proj.nextx < 0 || proj.nextx >= self.map.width || 
+                   proj.nexty < 0 || proj.nexty >= self.map.height ||
+                   self.map.tiles[proj.nextx as usize][proj.nexty as usize] == TileType::Wall {
+                // Clear the current position before removing
+                self.map.tiles[proj.x as usize][proj.y as usize] = TileType::Floor;
+                // Drop the mutable reference before removing
+                let _ = proj;
+                // Remove the projectile
+                self.player.projectiles.remove(i);
+            } 
+            //
+            else {
+                // Set the new projectile position in the map
+                self.map.tiles[proj.nextx as usize][proj.nexty as usize] = TileType::Proj;
+                i += 1;
             }
         }
 
@@ -133,6 +130,8 @@ impl GameState for State {
                     TileType::OuterWall =>'.',
                     TileType::Proj => '°',
                 };
+                 //a projectile is in the map
+                
                 ctx.set(x, y, RGB::named(WHITE), RGB::named(BLACK), glyph);
             }
         }
@@ -149,50 +148,41 @@ impl GameState for State {
         // Add text at the bottom of the screen
         let bottom_text = format!("Player Position: ({}, {})", self.player.x, self.player.y);
         ctx.print_color(
-            1, // X position (left-aligned)
-            self.map.height, // Y position (bottom of the screen)
+            self.map.width+1, // X position (left-aligned)
+            1, // Y position (bottom of the screen)
             RGB::named(WHITE),
             RGB::named(BLACK),
             bottom_text,
         );
 
-        let movementup: String = format!("Move Forward => W");
-        ctx.print_color(
-            1, // X position (left-aligned)
-            self.map.height+1, // Y position (bottom of the screen)
-            RGB::named(WHITE),
-            RGB::named(BLACK),
-            movementup,
-        );
-        let movement2: String = format!("Move Backward => S");
-        ctx.print_color(
-            1, // X position (left-aligned)
-            self.map.height+3, // Y position (bottom of the screen)
-            RGB::named(WHITE),
-            RGB::named(BLACK),
-            movement2,
-        );
-        let movement3: String = format!("Move Left => A");
-        ctx.print_color(
-            1, // X position (left-aligned)
-            self.map.height+5, // Y position (bottom of the screen)
-            RGB::named(WHITE),
-            RGB::named(BLACK),
-            movement3,
-        );
-        let movement4: String = format!("Move Right => D");
-        ctx.print_color(
-            1, // X position (left-aligned)
-            self.map.height+7, // Y position (bottom of the screen)
-            RGB::named(WHITE),
-            RGB::named(BLACK),
-            movement4,
-        );
+        let controls_text = [
+            "Movement Controls:",
+            "W - Move Up",
+            "S - Move Down",
+            "A - Move Left",
+            "D - Move Right",
+            "",
+            "Shooting Controls:",
+            "↑ - Shoot Up",
+            "↓ - Shoot Down",
+            "← - Shoot Left",
+            "→ - Shoot Right",
+        ];
+
+        for (i, text) in controls_text.iter().enumerate() {
+            ctx.print_color(
+                self.map.width + 1,
+                3 + i as i32,
+                RGB::named(WHITE),
+                RGB::named(BLACK),
+                text,
+            );
+        }
     }
 }
 
 fn main() -> BError {
-    let context = BTermBuilder::simple(30, 40)?
+    let context = BTermBuilder::simple(80, 50)?
         .with_title("Rusty Rust ")
         .with_fps_cap(45.0)
         .build()?;
